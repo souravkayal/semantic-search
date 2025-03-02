@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, status
 from product import Product, ProductSearch
 from product_vector import ProductTransformer
 from product_repository import ProductRepository
+from transformers import pipeline
+
 
 app = FastAPI()
 
@@ -27,11 +29,22 @@ def add_product(product: Product):
 
 @app.get("/product/search")
 def add_product(product: ProductSearch):
+    generator = pipeline('text-generation', model='gpt2')
 
     try:
         product_vector_result = ProductTransformer().encode_description(product.description)
-        return ProductRepository().read_product(product_vector_result)
+        search_result = ProductRepository().read_product(product_vector_result)
 
+        for result in search_result["results"]:
+            prompt = f"Based on the following product descriptions, provide a summary:\n\n{product.description}\n\nSummary:"
+            response = generator(prompt, max_length=150,
+                                 num_return_sequences=1,
+                                 truncation=True)
+
+            text_desc = response[0]['generated_text'].strip()
+            result["summary"] = text_desc
+
+        return search_result
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -39,4 +52,4 @@ def add_product(product: ProductSearch):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8002)
